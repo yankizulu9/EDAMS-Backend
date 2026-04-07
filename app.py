@@ -26,11 +26,9 @@ app = Flask(__name__)
 api = Api(app)
 
 # UPDATED: Secure CORS configuration for production
-# This allows your specific Vercel frontend to communicate with this Render API
 CORS(app, supports_credentials=True, resources={r"/*": {"origins": ["https://edams-relief.vercel.app"]}})
 
 # Configuration
-# Note: Render uses an ephemeral disk. SQLite data will reset on every deploy.
 app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv("DATABASE_URL", "sqlite:///edams.db")
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SECRET_KEY'] = os.getenv("SECRET_KEY", "super-secret-key-2026")
@@ -452,9 +450,11 @@ api.add_resource(SystemLogsResource, '/api/admin/logs')
 api.add_resource(AidDistributionResource, '/api/admin/aid-distribution')
 
 if __name__ == '__main__':
+    # UPDATED BLOCK: Ensure tables are created and admin seeded on startup
     with app.app_context():
         db.create_all()
         seed_admin()
-    # On Render, the port is provided by an environment variable
+        print("🚀 Application environment ready.")
+        
     port = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=port)
