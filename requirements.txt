@@ -8,4 +8,4 @@ flask-jwt-extended
 flask-restful
 requests
 python-dotenv
-gunicorn
+gunicorns
