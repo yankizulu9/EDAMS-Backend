@@ -3,6 +3,7 @@ flask-sqlalchemy
 flask-login
 flask-cors
 flask-jwt-extended
+flask-restful
 requests
 python-dotenv
 gunicorn
