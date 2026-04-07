@@ -25,11 +25,13 @@ load_dotenv()
 app = Flask(__name__)
 api = Api(app)
 
-# UPDATED: Secure CORS configuration for production
-CORS(app, supports_credentials=True, resources={r"/*": {"origins": ["https://edams-relief.vercel.app"]}})
+# FIXED: Added localhost to origins so you can still test on your laptop
+CORS(app, supports_credentials=True, resources={r"/*": {"origins": ["https://edams-relief.vercel.app", "http://127.0.0.1:5500", "http://localhost:5500"]}})
 
-# Configuration
-app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv("DATABASE_URL", "sqlite:///edams.db")
+# --- DATABASE CONFIGURATION FIXED FOR RENDER ---
+basedir = os.path.abspath(os.path.dirname(__file__))
+# This ensures the .db file is created inside the EDAMS folder on the server
+app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv("DATABASE_URL", 'sqlite:///' + os.path.join(basedir, 'edams.db'))
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SECRET_KEY'] = os.getenv("SECRET_KEY", "super-secret-key-2026")
 app.config['JWT_SECRET_KEY'] = os.getenv("JWT_SECRET_KEY", "jwt-secret-string-32-chars")
@@ -449,12 +451,13 @@ api.add_resource(AdminSummaryResource, '/api/admin/summary')
 api.add_resource(SystemLogsResource, '/api/admin/logs')
 api.add_resource(AidDistributionResource, '/api/admin/aid-distribution')
 
+# --- THE CRITICAL FIX FOR RENDER DEPLOYMENT ---
+# This block runs whether you use 'python app.py' OR Gunicorn on Render.
+with app.app_context():
+    db.create_all()
+    seed_admin()
+    print("🚀 Database initialized and Admin seeded.")
+
 if __name__ == '__main__':
-    # UPDATED BLOCK: Ensure tables are created and admin seeded on startup
-    with app.app_context():
-        db.create_all()
-        seed_admin()
-        print("🚀 Application environment ready.")
-        
     port = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=port)
