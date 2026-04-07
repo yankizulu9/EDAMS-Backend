@@ -25,11 +25,13 @@ load_dotenv()
 app = Flask(__name__)
 api = Api(app)
 
-# Allow CORS for your frontend to communicate with this API
-CORS(app, supports_credentials=True, resources={r"/*": {"origins": "*"}})
+# UPDATED: Secure CORS configuration for production
+# This allows your specific Vercel frontend to communicate with this Render API
+CORS(app, supports_credentials=True, resources={r"/*": {"origins": ["https://edams-relief.vercel.app"]}})
 
 # Configuration
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///edams.db'
+# Note: Render uses an ephemeral disk. SQLite data will reset on every deploy.
+app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv("DATABASE_URL", "sqlite:///edams.db")
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SECRET_KEY'] = os.getenv("SECRET_KEY", "super-secret-key-2026")
 app.config['JWT_SECRET_KEY'] = os.getenv("JWT_SECRET_KEY", "jwt-secret-string-32-chars")
@@ -168,8 +170,8 @@ def seed_admin():
 def seed_tasks_for_user(user_id):
     existing_tasks = Task.query.filter_by(user_id=user_id).first()
     if not existing_tasks:
-        t1 = Task(user_id=user_id, title="Verify Water Supply", description="Check Gaza City desalination units.")
-        t2 = Task(user_id=user_id, title="Food Distribution Log", description="Update Rafah crossing inventory.")
+        t1 = Task(user_id=user_id, title="Verify Water Supply", description="Check local supply units.")
+        t2 = Task(user_id=user_id, title="Food Distribution Log", description="Update crossing inventory.")
         db.session.add_all([t1, t2])
         db.session.commit()
         print(f"✅ Initial Tasks Seeded for User ID: {user_id}")
@@ -218,9 +220,7 @@ def generate_mpesa_password():
 class AdminSummaryResource(Resource):
     @jwt_required()
     def get(self):
-        # We allow any authenticated user to see stats for donate.html
         pending_count = User.query.filter_by(role='Recipient', is_approved=False).count()
-        # Sum only successful M-Pesa payments (result_code 0)
         total_funds = db.session.query(db.func.sum(Payment.amount)).filter(Payment.result_code == 0).scalar() or 0
         active_volunteers = User.query.filter_by(role='Volunteer').count()
 
@@ -346,7 +346,6 @@ class DonorStatsResource(Resource):
     @jwt_required()
     def get(self):
         user_id = get_jwt_identity()
-        # Fetch successful payments for this user
         payments = Payment.query.filter_by(user_id=user_id, result_code=0).all()
         total = sum(p.amount for p in payments)
         return {
@@ -410,7 +409,6 @@ class STKPushResource(Resource):
                                  json=payload, headers={"Authorization": f"Bearer {access_token}"})
             
             if resp.status_code == 200:
-                # Store the pending transaction
                 db.session.add(Payment(
                     user_id=get_jwt_identity(), 
                     phone_number=phone, 
@@ -429,7 +427,7 @@ def mpesa_callback():
     payment = Payment.query.filter_by(transaction_id=checkout_id).first()
     
     if payment:
-        payment.result_code = data.get("ResultCode") # 0 = Success
+        payment.result_code = data.get("ResultCode") 
         payment.result_desc = data.get("ResultDesc")
         db.session.commit()
         logging.info(f"Payment {checkout_id} updated with code {payment.result_code}")
@@ -457,4 +455,6 @@ if __name__ == '__main__':
     with app.app_context():
         db.create_all()
         seed_admin()
-    app.run(debug=True, port=5000)
+    # On Render, the port is provided by an environment variable
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host='0.0.0.0', port=port)
